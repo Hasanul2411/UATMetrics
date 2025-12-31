@@ -50,7 +50,7 @@ A production-ready Streamlit application for analyzing digital service performan
 ## Project Structure
 
 ```
-portfolio/
+UATMetrics/
 ├── app.py                      # Main application entry point
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # This file
@@ -109,7 +109,7 @@ See [TESTING.md](TESTING.md) for detailed testing instructions.
 
 ```bash
 git clone <your-repo-url>
-cd portfolio
+cd UATMetrics
 ```
 
 ### 2. Create Virtual Environment
