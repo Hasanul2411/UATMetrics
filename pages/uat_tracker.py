@@ -64,8 +64,8 @@ def load_defects(service_id: int = None) -> pd.DataFrame:
 def show_uat_tracker_page():
     """Display UAT tracker page."""
     require_role(["Analyst", "Tester", "Viewer"])
-    
-    st.title("🧪 UAT & Regression Testing Tracker")
+    from utils.ui import render_page_header, STUDIO_COLORS
+    render_page_header("UAT & Regression Testing", "Add and Manage User Acceptance Test Events", icon="tracker")
 
     # Load services
     with get_session() as session:
@@ -88,7 +88,8 @@ def show_uat_tracker_page():
         )
 
         # Load and display test cases
-        test_cases_df = load_test_cases(service_filter if service_filter != 0 else None)
+        with st.spinner("Loading test cases..."):
+            test_cases_df = load_test_cases(service_filter if service_filter != 0 else None)
 
         if not test_cases_df.empty:
             st.markdown(f"**Total Test Cases: {len(test_cases_df)}**")
@@ -101,12 +102,81 @@ def show_uat_tracker_page():
                     with cols[idx]:
                         st.metric(status, count)
 
-            # Display test cases table
-            st.dataframe(
-                test_cases_df[["id", "service", "title", "status", "created_at"]],
-                use_container_width=True,
-                hide_index=True
-            )
+            # Display test cases with editing capabilities
+            if check_role_access(["Analyst", "Tester"]):
+                st.info("💡 You can edit 'Status' directly in the table below. Select rows to Delete.")
+                
+                # Add a selection column for deletion
+                test_cases_df["Delete"] = False
+                
+                edited_df = st.data_editor(
+                    test_cases_df,
+                    column_config={
+                        "Delete": st.column_config.CheckboxColumn(
+                            "Delete",
+                            help="Select to delete",
+                            default=False,
+                        ),
+                        "status": st.column_config.SelectboxColumn(
+                            "Status",
+                            options=["Not Started", "Passed", "Failed", "Blocked"],
+                            required=True
+                        ),
+                        "id": st.column_config.NumberColumn("ID", disabled=True),
+                        "service": st.column_config.TextColumn("Service", disabled=True),
+                        "title": st.column_config.TextColumn("Title", disabled=True),
+                        "created_at": st.column_config.DatetimeColumn("Created At", disabled=True),
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    key="tc_editor"
+                )
+                
+                if st.button("Save Changes", key="save_tc"):
+                    try:
+                        with get_session() as session:
+                            changes_count = 0
+                            
+                            # Process checks for deletion
+                            rows_to_delete = edited_df[edited_df["Delete"] == True]
+                            for _, row in rows_to_delete.iterrows():
+                                tc_to_delete = session.query(TestCase).get(row["id"])
+                                if tc_to_delete:
+                                    session.delete(tc_to_delete)
+                                    changes_count += 1
+                            
+                            # Process updates (scan for status changes)
+                            # Since we don't have the original df easily accessible to compare diffs row-by-row efficiently without iterating,
+                            # and N is small, we can just update status for all non-deleted rows if they differ.
+                            # Optimization: Just look at touched rows if possible? 
+                            # Simpler: Iterate edited_df, skip deleted.
+                            
+                            # Actually, st.data_editor returns the final state.
+                            # We can just iterate and update.
+                            
+                            for _, row in edited_df.iterrows():
+                                if not row["Delete"]:
+                                    tc = session.query(TestCase).get(row["id"])
+                                    if tc and tc.status != row["status"]:
+                                        tc.status = row["status"]
+                                        changes_count += 1
+                                        
+                            session.commit()
+                            if changes_count > 0:
+                                st.success(f"Successfully saved {changes_count} changes.")
+                                st.rerun()
+                            else:
+                                st.info("No changes detected.")
+                                
+                    except Exception as e:
+                        st.error(f"Error saving changes: {e}")
+            else:
+                 # Read-only view for viewers
+                 st.dataframe(
+                    test_cases_df[["id", "service", "title", "status", "created_at"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
 
         # Create/Edit Test Case (only for Analyst and Tester)
         if check_role_access(["Analyst", "Tester"]):
@@ -168,7 +238,8 @@ def show_uat_tracker_page():
         )
 
         # Load and display defects
-        defects_df = load_defects(defect_service_filter if defect_service_filter != 0 else None)
+        with st.spinner("Loading defects..."):
+            defects_df = load_defects(defect_service_filter if defect_service_filter != 0 else None)
 
         if not defects_df.empty:
             st.markdown(f"**Total Defects: {len(defects_df)}**")
@@ -190,12 +261,80 @@ def show_uat_tracker_page():
                     for status, count in status_counts.items():
                         st.write(f"- {status}: {count}")
 
-            # Display defects table
-            st.dataframe(
-                defects_df[["id", "service", "title", "severity", "status", "created_at"]],
-                use_container_width=True,
-                hide_index=True
-            )
+            # Display defects with editing capabilities
+            if check_role_access(["Analyst", "Tester"]):
+                st.info("💡 You can edit 'Status' and 'Severity' directly. Select rows to Delete.")
+                
+                defects_df["Delete"] = False
+                
+                edited_defects_df = st.data_editor(
+                    defects_df,
+                    column_config={
+                        "Delete": st.column_config.CheckboxColumn(
+                            "Delete",
+                            help="Select to delete",
+                            default=False,
+                        ),
+                        "status": st.column_config.SelectboxColumn(
+                            "Status",
+                            options=["Open", "In Progress", "Resolved", "Closed"],
+                            required=True
+                        ),
+                         "severity": st.column_config.SelectboxColumn(
+                            "Severity",
+                            options=["Critical", "High", "Medium", "Low"],
+                            required=True
+                        ),
+                        "id": st.column_config.NumberColumn("ID", disabled=True),
+                        "service": st.column_config.TextColumn("Service", disabled=True),
+                        "title": st.column_config.TextColumn("Title", disabled=True),
+                        "created_at": st.column_config.DatetimeColumn("Created At", disabled=True),
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    key="defect_editor"
+                )
+                
+                if st.button("Save Changes", key="save_defects"):
+                    try:
+                        with get_session() as session:
+                            changes_count = 0
+                            
+                            # Process deletions
+                            rows_to_delete = edited_defects_df[edited_defects_df["Delete"] == True]
+                            for _, row in rows_to_delete.iterrows():
+                                defect_to_delete = session.query(Defect).get(row["id"])
+                                if defect_to_delete:
+                                    session.delete(defect_to_delete)
+                                    changes_count += 1
+                                    
+                            # Process updates
+                            for _, row in edited_defects_df.iterrows():
+                                if not row["Delete"]:
+                                    defect = session.query(Defect).get(row["id"])
+                                    if defect:
+                                        if defect.status != row["status"] or defect.severity != row["severity"]:
+                                            defect.status = row["status"]
+                                            defect.severity = row["severity"]
+                                            changes_count += 1
+                            
+                            session.commit()
+                            if changes_count > 0:
+                                st.success(f"Successfully saved {changes_count} changes.")
+                                st.rerun()
+                            else:
+                                st.info("No changes detected.")
+
+                    except Exception as e:
+                        st.error(f"Error saving changes: {e}")
+
+            else:
+                 # Read-only view
+                st.dataframe(
+                    defects_df[["id", "service", "title", "severity", "status", "created_at"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
 
         # Create/Edit Defect (only for Analyst and Tester)
         if check_role_access(["Analyst", "Tester"]):

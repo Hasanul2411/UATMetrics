@@ -5,11 +5,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from sqlalchemy import func, case
 from datetime import datetime, timedelta
 from database.connection import get_session
 from database.models import Event, Service, TestCase, Defect
 from utils.auth import require_role
 from utils.logger import logger
+from utils.ui import apply_chart_theme, render_page_header, STUDIO_COLORS
 
 
 def load_dashboard_data():
@@ -27,28 +29,39 @@ def load_dashboard_data():
             error_events = len([e for e in events if e.status == "error"])
 
             # Test cases summary
-            test_cases = session.query(TestCase).all()
-            total_test_cases = len(test_cases)
-            passed_test_cases = len([tc for tc in test_cases if tc.status == "Passed"])
-            failed_test_cases = len([tc for tc in test_cases if tc.status == "Failed"])
+
+            with st.spinner("Loading test cases..."):
+                test_cases = session.query(TestCase).all()
+                total_test_cases = len(test_cases)
+                passed_test_cases = len([tc for tc in test_cases if tc.status == "Passed"])
+                failed_test_cases = len([tc for tc in test_cases if tc.status == "Failed"])
 
             # Defects summary
-            defects = session.query(Defect).all()
-            total_defects = len(defects)
-            open_defects = len([d for d in defects if d.status == "Open"])
-            critical_defects = len([d for d in defects if d.severity == "Critical"])
+            with st.spinner("Loading defects..."):
+                defects = session.query(Defect).all()
+                total_defects = len(defects)
+                open_defects = len([d for d in defects if d.status == "Open"])
+                critical_defects = len([d for d in defects if d.severity == "Critical"])
 
-            # Service performance data
-            service_perf = []
-            for service in session.query(Service).all():
-                service_events = [e for e in events if e.service_id == service.id]
-                if service_events:
-                    success_rate = len([e for e in service_events if e.status == "success"]) / len(service_events) * 100
-                    service_perf.append({
-                        "service": service.name,
-                        "success_rate": success_rate,
-                        "total_events": len(service_events)
-                    })
+            # Service performance data (Optimized)
+            with st.spinner("Crunching analytics data..."):
+                stmt = session.query(
+                    Service.name,
+                    func.count(Event.id).label('total_events'),
+                    func.sum(case((Event.status == 'success', 1), else_=0)).label('success_count')
+                ).outerjoin(Event, (Service.id == Event.service_id) & (Event.timestamp >= thirty_days_ago)).group_by(Service.id, Service.name)
+                
+                perf_results = stmt.all()
+                
+                service_perf = []
+                for name, total, success in perf_results:
+                    if total > 0:
+                        rate = (success / total) * 100
+                        service_perf.append({
+                            "service": name,
+                            "success_rate": rate,
+                            "total_events": total
+                        })
 
             return {
                 "services_count": services_count,
@@ -76,10 +89,10 @@ def show_dashboard_page():
     """Display executive dashboard."""
     require_role(["Analyst", "Tester", "Viewer"])
     
-    st.title("📈 Executive Dashboard")
-    st.markdown("### High-Level Performance Overview")
+    render_page_header("Executive Dashboard", "High-Level Performance Overview", icon="dashboard")
 
-    data = load_dashboard_data()
+    with st.spinner("Loading executive insights..."):
+        data = load_dashboard_data()
     if data is None:
         st.error("Unable to load dashboard data. Please check your database connection.")
         return
@@ -146,10 +159,10 @@ def show_dashboard_page():
                 title="Service Success Rate",
                 labels={"service": "Service", "success_rate": "Success Rate (%)"},
                 color="success_rate",
-                color_continuous_scale="RdYlGn"
+                color_continuous_scale=[STUDIO_COLORS["border"], STUDIO_COLORS["indigo"], STUDIO_COLORS["cyan"]]
             )
             fig_service.update_layout(xaxis_tickangle=-45, showlegend=False)
-            st.plotly_chart(fig_service, use_container_width=True)
+            st.plotly_chart(apply_chart_theme(fig_service), use_container_width=True)
         else:
             st.info("No service performance data available.")
 
@@ -169,13 +182,13 @@ def show_dashboard_page():
                 labels={"severity": "Severity", "count": "Count"},
                 color="severity",
                 color_discrete_map={
-                    "Critical": "#e74c3c",
-                    "High": "#e67e22",
-                    "Medium": "#f39c12",
-                    "Low": "#3498db"
+                    "Critical": STUDIO_COLORS["rose"],
+                    "High": STUDIO_COLORS["amber"],
+                    "Medium": STUDIO_COLORS["indigo"],
+                    "Low": STUDIO_COLORS["cyan"]
                 }
             )
-            st.plotly_chart(fig_severity, use_container_width=True)
+            st.plotly_chart(apply_chart_theme(fig_severity), use_container_width=True)
         else:
             st.info("No defects data available.")
 

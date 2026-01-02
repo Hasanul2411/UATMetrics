@@ -2,8 +2,9 @@
 Authentication and authorization utilities.
 """
 import bcrypt
+import secrets
 import streamlit as st
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 from config.settings import get_users_config
 from database.models import User
 from database.connection import get_session
@@ -43,13 +44,45 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, str]]:
     users_config = get_users_config()
     if username in users_config:
         user_config = users_config[username]
-        if password == user_config["password"]:  # Simple comparison for secrets-based auth
+        # Use secrets.compare_digest for secure string comparison to prevent timing attacks
+        if secrets.compare_digest(password, user_config["password"]):
             return {
                 "username": username,
                 "role": user_config["role"]
             }
 
     return None
+
+
+def register_user(username: str, password: str, role: str = "Viewer") -> Tuple[bool, str]:
+    """
+    Register a new user in the database.
+    Returns (success, message).
+    """
+    if not username or not password:
+        return False, "Username and password are required."
+        
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long."
+
+    try:
+        with get_session() as session:
+            # Check if user exists
+            existing = session.query(User).filter(User.username == username).first()
+            if existing:
+                return False, "Username already exists."
+            
+            # Create user
+            new_user = User(
+                username=username,
+                password_hash=hash_password(password),
+                role=role
+            )
+            session.add(new_user)
+            # Commit handled by context manager
+            return True, f"User '{username}' registered successfully."
+    except Exception as e:
+        return False, f"Error registering user: {str(e)}"
 
 
 def check_role_access(required_roles: list) -> bool:

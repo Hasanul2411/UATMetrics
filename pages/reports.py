@@ -15,11 +15,8 @@ from utils.logger import logger
 
 def show_reports_page():
     """Display reports generation page."""
-    require_role(["Analyst", "Viewer"])
-    
-    st.title("📄 Automated Reporting")
-
-    st.markdown("Generate comprehensive PDF reports for analytics and UAT data.")
+    from utils.ui import render_page_header, STUDIO_COLORS
+    render_page_header("Project Reports", "Generate and Export Summary Reports", icon="reports")
 
     # Report Type Selection
     report_type = st.radio(

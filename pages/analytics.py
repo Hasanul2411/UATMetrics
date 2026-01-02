@@ -11,6 +11,7 @@ from database.models import Event, Service
 from utils.auth import require_role
 from utils.validators import validate_date_range
 from utils.logger import logger
+from utils.ui import apply_chart_theme, render_page_header, STUDIO_COLORS
 
 
 def calculate_completion_rate(df: pd.DataFrame) -> float:
@@ -93,7 +94,7 @@ def show_analytics_page():
     """Display analytics dashboard."""
     require_role(["Analyst", "Tester", "Viewer"])
     
-    st.title("📊 Digital Journey Analytics")
+    render_page_header("Digital Journey Analytics", icon="analytics")
 
     # Load services for filter
     with get_session() as session:
@@ -138,7 +139,8 @@ def show_analytics_page():
 
     # Load data
     service_filter = None if selected_service_id == 0 else selected_service_id
-    df = load_events_data(service_filter, start_datetime, end_datetime)
+    with st.spinner("Crunching analytics data..."):
+        df = load_events_data(service_filter, start_datetime, end_datetime)
 
     if df.empty:
         st.info("📊 No data available for the selected filters.")
@@ -188,10 +190,14 @@ def show_analytics_page():
                         values=status_counts.values,
                         names=status_counts.index,
                         title="Event Status Distribution",
-                        color_discrete_map={"success": "#2ecc71", "error": "#e74c3c", "pending": "#f39c12"}
+                        color_discrete_map={
+                            "success": STUDIO_COLORS["emerald"],
+                            "error": STUDIO_COLORS["rose"],
+                            "pending": STUDIO_COLORS["amber"]
+                        }
                     )
                     fig_status.update_layout(showlegend=True)
-                    st.plotly_chart(fig_status, use_container_width=True)
+                    st.plotly_chart(apply_chart_theme(fig_status), use_container_width=True)
                 else:
                     st.info("No status data available for chart")
             else:
@@ -213,7 +219,7 @@ def show_analytics_page():
             labels={"date": "Date", "count": "Event Count", "status": "Status"}
         )
         fig_timeline.update_layout(showlegend=True)
-        st.plotly_chart(fig_timeline, use_container_width=True)
+        st.plotly_chart(apply_chart_theme(fig_timeline), use_container_width=True)
 
     # Service Performance
     st.markdown("#### Service Performance")
@@ -230,10 +236,10 @@ def show_analytics_page():
         title="Completion Rate by Service",
         labels={"service": "Service", "completion_rate": "Completion Rate (%)"},
         color="completion_rate",
-        color_continuous_scale="Viridis"
+        color_continuous_scale=[STUDIO_COLORS["border"], STUDIO_COLORS["indigo"], STUDIO_COLORS["cyan"]]
     )
     fig_service.update_layout(xaxis_tickangle=-45)
-    st.plotly_chart(fig_service, use_container_width=True)
+    st.plotly_chart(apply_chart_theme(fig_service), use_container_width=True)
 
     # Detailed Data Table
     st.markdown("---")

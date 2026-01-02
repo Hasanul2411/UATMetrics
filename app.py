@@ -1,6 +1,6 @@
 """
 Main Streamlit application entry point.
-Digital Service Analytics & UAT Readiness Platform
+Digital Service Analytics & UAT Readiness Platform (v5)
 """
 import streamlit as st
 import traceback
@@ -13,14 +13,18 @@ from utils.auth import init_session_state, check_role_access
 from database.connection import init_database
 from utils.data_generator import generate_sample_data
 from utils.logger import logger
+from utils.ui import inject_custom_css
 
 # Page configuration
 st.set_page_config(
-    page_title="Digital Service Analytics",
-    page_icon="📊",
+    page_title="Ultimate Analytics Studio",
+    page_icon="assets/logo.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Inject custom CSS
+inject_custom_css()
 
 # Initialize session state
 try:
@@ -49,9 +53,11 @@ def main():
 
     # Sidebar navigation
     user = st.session_state.get("user", {})
-    st.sidebar.title("📊 Digital Service Analytics")
-    st.sidebar.markdown(f"**User:** {user.get('username', 'Unknown')}")
-    st.sidebar.markdown(f"**Role:** {user.get('role', 'Unknown')}")
+    # Sidebar Branding
+    st.sidebar.image("assets/logo.png", use_container_width=True)
+    
+    st.sidebar.markdown(f"**Logged in as:** {user.get('username', 'Unknown')}")
+    st.sidebar.markdown(f"**Access Level:** {user.get('role', 'Unknown')}")
 
     st.sidebar.markdown("---")
 
@@ -70,7 +76,7 @@ def main():
     if check_role_access(["Analyst"]):
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 🔧 Admin Tools")
-        if st.sidebar.button("Generate Sample Data"):
+        if st.sidebar.button("Generate Sample Data", use_container_width=True):
             try:
                 with st.spinner("Generating sample data..."):
                     result = generate_sample_data()

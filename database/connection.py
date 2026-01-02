@@ -10,6 +10,7 @@ from urllib.parse import quote_plus
 import streamlit as st
 from config.settings import get_db_config
 from database.models import Base
+from utils.logger import logger
 
 
 def get_database_url() -> str:
@@ -57,11 +58,17 @@ def get_engine():
         st.stop()
 
 
+@st.cache_resource
+def get_session_factory():
+    """Create and cache session factory."""
+    engine = get_engine()
+    return sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
 @contextmanager
 def get_session() -> Generator[Session, None, None]:
     """Get database session with automatic cleanup."""
-    engine = get_engine()
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    SessionLocal = get_session_factory()
     session = SessionLocal()
     try:
         yield session
